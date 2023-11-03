@@ -22,6 +22,23 @@ public class MainActivity extends AppCompatActivity{
     List<String> roundKeys;
     QAData data;
 
+    private void testFunc(){
+        data.MixColumns(data.paddedPlaintext);
+        Log.i(TAG, "MixColumns: " + Arrays.toString(data.currState));
+        data.InverseMixColumns(data.currState);
+        Log.i(TAG, "InverseMixColumns: " + Arrays.toString(data.currState));
+
+        data.SubBytes(data.paddedPlaintext);
+        Log.i(TAG, "SubBytes: " + Arrays.toString(data.currState));
+        data.InverseSubBytes(data.currState);
+        Log.i(TAG, "InverseSubBytes: " + Arrays.toString(data.currState));
+
+        data.ShiftRows(data.paddedPlaintext);
+        Log.i(TAG, "ShiftRows: " + Arrays.toString(data.currState));
+        data.InverseShiftRows(data.currState);
+        Log.i(TAG, "InverseShiftRows: " + Arrays.toString(data.currState));
+    }
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -29,9 +46,9 @@ public class MainActivity extends AppCompatActivity{
     }
 
     public void cbcTest2(){
-        data = new QAData();
+        data = new QAData(null, hexStringToByteArray("28a226d160dad07883d04e008a7897ee2e4b7465d5290d0c0e6c6822236e1daafb94ffe0c5da05d9476be028ad7c1d81"));
         String keyHex = "140b41b22a29beb4061bda66b6747e14"; // 128-bit key in hex
-        data.plaintext = hexStringToByteArray("28a226d160dad07883d04e008a7897ee2e4b7465d5290d0c0e6c6822236e1daafb94ffe0c5da05d9476be028ad7c1d81");
+//        data.plaintext = hexStringToByteArray("28a226d160dad07883d04e008a7897ee2e4b7465d5290d0c0e6c6822236e1daafb94ffe0c5da05d9476be028ad7c1d81");
         Log.i(TAG, "cbcTest2: original size " + Arrays.toString(data.plaintext).length());
         data.paddingPlainText();
         Log.i(TAG, "cbcTest2: padded " + Arrays.toString(data.paddedPlaintext));
@@ -48,6 +65,8 @@ public class MainActivity extends AppCompatActivity{
 //        byte[] key = hexStringToByteArray(keyHex);
         byte[] ivByte = hexStringToByteArray(iv);
 
+        testFunc();
+
 //        roundKeys = expandKey(hexStringToByteArray(keyHex));
 //        for (int i = 0; i < roundKeys.size(); i++){
 //            Log.i(TAG, "cbcTest2: round key " + i + " " +roundKeys.get(i));
@@ -56,16 +75,16 @@ public class MainActivity extends AppCompatActivity{
 
 
         // Decrypt the ciphertext
-        byte[] decryptedPlaintext = new byte[0];
-        try {
-            decryptedPlaintext = decryptAES(hexStringToByteArray(keyHex), ivByte);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        // Convert the decrypted plaintext to a hex format
-        String decryptedPlaintextHex = byteArrayToHexString(decryptedPlaintext);
-        System.out.println("Decrypted Plaintext: " + decryptedPlaintextHex);
+//        byte[] decryptedPlaintext = new byte[0];
+//        try {
+//            decryptedPlaintext = decryptAES(hexStringToByteArray(keyHex), ivByte);
+//        } catch (Exception e) {
+//            throw new RuntimeException(e);
+//        }
+//
+//        // Convert the decrypted plaintext to a hex format
+//        String decryptedPlaintextHex = byteArrayToHexString(decryptedPlaintext);
+//        System.out.println("Decrypted Plaintext: " + decryptedPlaintextHex);
     }
 
 //qa 1
@@ -117,20 +136,22 @@ public class MainActivity extends AppCompatActivity{
         roundKeys = expandKey(key);
         byte[] decryptedPlaintext = new byte[data.ciphertext.length];
 
-        for (data.ROUND = 10; data.ROUND > 0; data.ROUND--){
-            if (data.ROUND != 10 && data.ROUND != 1){
-
+        for (data.ROUND = 10; data.ROUND >= 0; data.ROUND--){
+            if (data.ROUND != 10 && data.ROUND != 0){
+                data.addRoundKey(data.paddedPlaintext, hexStringToByteArray(roundKeys.get(data.ROUND)));
+                data.InverseMixColumns(data.paddedPlaintext);
+                data.InverseShiftRows(data.paddedPlaintext);
+                data.InverseSubBytes(data.paddedPlaintext);
+                data.currState = xorByteArrays(data.previousState, data.currState);
             } else if (data.ROUND == 10) {
                 data.addRoundKey(data.paddedPlaintext, hexStringToByteArray(roundKeys.get(10)));
+                data.InverseShiftRows(data.paddedPlaintext);
+                data.InverseSubBytes(data.paddedPlaintext);
             } else  {
-//                for (int i = 0; i < 16; i++){
-//                    data.paddedPlaintext[i] ^= iv[i];
-//                }
-
+                data.addRoundKey(data.paddedPlaintext, hexStringToByteArray(roundKeys.get(1)));
             }
-        }
 
-        //TODO last round logic implement here
+        }
 
         data.ROUND = 0;
         return decryptedPlaintext;

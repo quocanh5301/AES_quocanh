@@ -2,9 +2,12 @@ package com.example.cryptoplayground2;
 
 import static com.example.cryptoplayground2.MainActivity.xorByteArrays;
 
+import android.util.Log;
+
 import java.util.Arrays;
 
 public class QAData {
+    private static final String TAG = "QAData";
     public byte[] ciphertext;
     public byte[] plaintext;
     public byte[] paddedPlaintext;
@@ -17,54 +20,79 @@ public class QAData {
     public byte[] currState;
     public byte[] previousState;
 
-    public void addRoundKey(byte[] data, byte[] roundKey) {
-        for (int i = 0; i < data.length; i+=16){
-            for (int j = i; j < (i + 16); j++){
-                currState[j] = data[j]  ^=  roundKey[j];
-            }
-        }
+    public QAData(byte[] ciphertext, byte[] plaintext) {
+        this.ciphertext = ciphertext;
+        this.plaintext = plaintext;
+        previousState = new byte[ciphertext.length];
     }
 
-    public void SubBytes(byte[] state) {
-        for (int j = 0; j < state.length; j+=16){
+    public void addRoundKey(byte[] data, byte[] roundKey, int offSet) {
+//        for (int i = 0; i < data.length; i+=16){
+//            for (int j = i; j < (i + 16); j++){
+//                currState[j] = data[j]  ^=  roundKey[j];
+//            }
+//        }
+
+        byte[] currBlock = new byte[data.length];
+        for (int j = 0; j < 16; j++){
+            currBlock[j] = data[j]  ^=  roundKey[j];
+        }
+        System.arraycopy(currBlock, 0, currState, offSet, currBlock.length);
+    }
+
+    public void SubBytes(byte[] data, int offSet) {
+        for (int j = 0; j < data.length; j+=16){
             for (int i = j; i < j + 16; i++) {
-                int row = (state[i] >> 4) & 0x0F;
-                int col = state[i] & 0x0F;
+                int row = (data[i] >> 4) & 0x0F;
+                int col = data[i] & 0x0F;
                 currState[i] = (byte) SBox[row][col];
             }
         }
     }
 
-    public void ShiftRows(byte[] state, int offset) {
-        for (int j = 0; j < state.length; j+=16){
-            for (int i = j; i < j + 16; i++) {
-                int row = (state[i] >> 4) & 0x0F;
-                int col = state[i] & 0x0F;
-                currState[i] = (byte) SBox[row][col];
+    public void ShiftRows(byte[] data, int offSet) {
+        // Define the number of rows and columns in the AES state
+        int numRows = 4;
+        int numCols = 4;
+        byte[] currBlock;
+        for (int j = 0; j < data.length; j+=16){
+            currBlock = Arrays.copyOfRange(data, j, j + 16); //copy from (j) to (j + 15)
+            Log.i(TAG, "ShiftRows: currBlock " + Arrays.toString(currBlock));
+            byte[] temp = new byte[currBlock.length];
+
+            // Perform row shifting
+            for (int row = 0; row < numRows; row++) {
+                for (int col = 0; col < numCols; col++) {
+                    // Calculate the new position for the current byte
+                    int newRow = row;
+                    int newCol = (col + row) % (numCols - 1);
+                    // Copy the byte to the new position in the temporary array
+                    temp[newRow * numCols + newCol] = currBlock[row * numCols + col];
+                }
             }
+            System.arraycopy(temp, 0, currState, j, temp.length);
         }
-        byte[] temp = new byte[16];
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4; j++) {
-                temp[i + j * 4] = state[offset + (i + (j + i) % 4) * 4];
-            }
-        }
-        System.arraycopy(temp, 0, currState, offset, 16);
     }
 
-    public  void MixColumns(byte[] state, int offset) {
+
+    public  void MixColumns(byte[] state, int offSet) {
         byte[] temp = new byte[16];
-        for (int i = 0; i < 4; i++) {
-            int s0 = state[offset + i];
-            int s1 = state[offset + i + 4];
-            int s2 = state[offset + i + 8];
-            int s3 = state[offset + i + 12];
-            temp[i] = (byte) (multiply(0x02, s0) ^ multiply(0x03, s1) ^ s2 ^ s3);
-            temp[i + 4] = (byte) (s0 ^ multiply(0x02, s1) ^ multiply(0x03, s2) ^ s3);
-            temp[i + 8] = (byte) (s0 ^ s1 ^ multiply(0x02, s2) ^ multiply(0x03, s3));
-            temp[i + 12] = (byte) (multiply(0x03, s0) ^ s1 ^ s2 ^ multiply(0x02, s3));
+        byte[] currBlock;
+        for (int j = 0; j < state.length; j+=16){
+            currBlock = Arrays.copyOfRange(state, j, j + 16); //copy from (j + 1) to (j + 16)
+            Log.i(TAG, "MixColumns: currBlock " + Arrays.toString(currBlock));
+            for (int i = 0; i < 4; i++) {
+                int s0 = currBlock[i];
+                int s1 = currBlock[i + 4];
+                int s2 = currBlock[i + 8];
+                int s3 = currBlock[i + 12];
+                temp[i] = (byte) (multiply(0x02, s0) ^ multiply(0x03, s1) ^ s2 ^ s3);
+                temp[i + 4] = (byte) (s0 ^ multiply(0x02, s1) ^ multiply(0x03, s2) ^ s3);
+                temp[i + 8] = (byte) (s0 ^ s1 ^ multiply(0x02, s2) ^ multiply(0x03, s3));
+                temp[i + 12] = (byte) (multiply(0x03, s0) ^ s1 ^ s2 ^ multiply(0x02, s3));
+            }
+            System.arraycopy(temp, 0, currState, j, 16);
         }
-        System.arraycopy(temp, 0, currState, offset, 16);
     }
 
     // Helper function to multiply two bytes in GF(2^8)
@@ -118,38 +146,60 @@ public class QAData {
             {0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68,
                     0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16}};
 
-    public  void InverseMixColumns(byte[] state, int offset) {
+    public void InverseMixColumns(byte[] state) {
         byte[] temp = new byte[16];
-        for (int i = 0; i < 4; i++) {
-            int s0 = state[offset + i];
-            int s1 = state[offset + i + 4];
-            int s2 = state[offset + i + 8];
-            int s3 = state[offset + i + 12];
-            temp[i] = (byte) (multiply(0x0E, s0) ^ multiply(0x0B, s1) ^ multiply(0x0D, s2) ^ multiply(0x09, s3));
-            temp[i + 4] = (byte) (multiply(0x09, s0) ^ multiply(0x0E, s1) ^ multiply(0x0B, s2) ^ multiply(0x0D, s3));
-            temp[i + 8] = (byte) (multiply(0x0D, s0) ^ multiply(0x09, s1) ^ multiply(0x0E, s2) ^ multiply(0x0B, s3));
-            temp[i + 12] = (byte) (multiply(0x0B, s0) ^ multiply(0x0D, s1) ^ multiply(0x09, s2) ^ multiply(0x0E, s3));
+        byte[] currBlock;
+        for (int j = 0; j < state.length; j += 16) {
+            currBlock = Arrays.copyOfRange(state, j, j + 16);
+            for (int i = 0; i < 4; i++) {
+                int s0 = currBlock[i];
+                int s1 = currBlock[i + 4];
+                int s2 = currBlock[i + 8];
+                int s3 = currBlock[i + 12];
+                temp[i] = (byte) (multiply(0x0E, s0) ^ multiply(0x0B, s1) ^ multiply(0x0D, s2) ^ multiply(0x09, s3));
+                temp[i + 4] = (byte) (multiply(0x09, s0) ^ multiply(0x0E, s1) ^ multiply(0x0B, s2) ^ multiply(0x0D, s3));
+                temp[i + 8] = (byte) (multiply(0x0D, s0) ^ multiply(0x09, s1) ^ multiply(0x0E, s2) ^ multiply(0x0B, s3));
+                temp[i + 12] = (byte) (multiply(0x0B, s0) ^ multiply(0x0D, s1) ^ multiply(0x09, s2) ^ multiply(0x0E, s3));
+            }
+            System.arraycopy(temp, 0, currState, j, 16);
         }
-        System.arraycopy(temp, 0, currState, offset, 16);
     }
 
-    public void InverseShiftRows(byte[] state, int offset) {
-        byte[] temp = new byte[16];
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4; j++) {
-                temp[offset + (i + (j - i + 4) % 4) * 4] = state[i + j * 4];
+
+    public void InverseShiftRows(byte[] state) {
+        // Define the number of rows and columns in the AES state
+        int numRows = 4;
+        int numCols = 4;
+        byte[] currBlock;
+        for (int j = 0; j < state.length; j += 16) {
+            currBlock = Arrays.copyOfRange(state, j, j + 16);
+            byte[] temp = new byte[currBlock.length];
+
+            // Perform inverse row shifting
+            for (int row = 0; row < numRows; row++) {
+                for (int col = 0; col < numCols; col++) {
+                    // Calculate the new position for the current byte
+                    int newRow = row;
+                    int newCol = (col - row + numCols) % numCols;
+                    // Copy the byte to the new position in the temporary array
+                    temp[newRow * numCols + newCol] = currBlock[row * numCols + col];
+                }
+            }
+            System.arraycopy(temp, 0, state, j, temp.length);
+        }
+    }
+
+
+    public void InverseSubBytes(byte[] state) {
+        for (int j = 0; j < state.length; j += 16) {
+            for (int i = j; i < j + 16; i++) {
+                int row = (state[i] >> 4) & 0x0F;
+                int col = state[i] & 0x0F;
+                state[i] = (byte) InverseSBox[row][col];
             }
         }
-        System.arraycopy(temp, 0, currState, offset, 16);
     }
 
-    public void InverseSubBytes(byte[] state, int offset) {
-        for (int i = offset; i < offset + 16; i++) {
-            int row = (state[i] >> 4) & 0x0F;
-            int col = state[i] & 0x0F;
-            currState[i] = (byte) InverseSBox[row][col];
-        }
-    }
 
     public static int[][] InverseSBox = {
             {0x52, 0x09, 0x6A, 0xD5, 0x30, 0x36, 0xA5, 0x38,
@@ -189,12 +239,14 @@ public class QAData {
     public void paddingPlainText(){
         if (plaintext.length % blockSize != 0){
             int paddingLength = blockSize - (plaintext.length % blockSize);
+            paddedPlaintext = new byte[paddingLength];
             // Add PKCS7 padding to plaintext
             paddedPlaintext = Arrays.copyOf(plaintext, plaintext.length + paddingLength);
             Arrays.fill(paddedPlaintext, plaintext.length, paddedPlaintext.length, (byte) paddingLength);
         } else {
             paddedPlaintext = plaintext;
         }
+        currState = new byte[paddedPlaintext.length];
     }
 
     public void inversePadding() {

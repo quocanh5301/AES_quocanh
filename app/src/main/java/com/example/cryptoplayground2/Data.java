@@ -166,7 +166,7 @@ public class Data
     {
         assert (this.byteArray != null && other != null);
         if (this.NUM_BYTES != other.getNumBytes())
-            throw new IllegalArgumentException("Differing number of bytes");
+                throw new IllegalArgumentException("Differing number of bytes");
         for (int i = 0; i < NUM_BYTES; i++)
             this.byteArray[i] ^= other.byteArray[i];
         this.updateMatrix();
